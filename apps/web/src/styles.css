@@ -1,0 +1,161 @@
+:root {
+  color: #172033;
+  background: #f5f7fb;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.project-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 2rem;
+}
+
+.research-card {
+  width: min(100%, 48rem);
+  padding: clamp(1.5rem, 5vw, 3.5rem);
+  border: 1px solid #dce3ee;
+  border-radius: 1.5rem;
+  background: #ffffff;
+  box-shadow: 0 1.5rem 4rem rgb(31 47 74 / 10%);
+}
+
+.eyebrow {
+  margin: 0 0 0.75rem;
+  color: #3c63d9;
+  font-size: 0.875rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(2rem, 6vw, 3.75rem);
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+}
+
+.summary {
+  max-width: 42rem;
+  margin: 1.25rem 0 0;
+  color: #52627a;
+  font-size: 1.05rem;
+  line-height: 1.7;
+}
+
+.research-form {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+.research-form label {
+  font-weight: 750;
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #bac5d6;
+  border-radius: 0.8rem;
+  padding: 1rem;
+  color: inherit;
+  background: #fbfcff;
+  line-height: 1.6;
+}
+
+textarea:focus {
+  border-color: #3c63d9;
+  outline: 3px solid rgb(60 99 217 / 16%);
+}
+
+.field-hint {
+  margin: 0;
+  color: #68768a;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+button {
+  justify-self: start;
+  border: 0;
+  border-radius: 0.75rem;
+  padding: 0.8rem 1.35rem;
+  color: #ffffff;
+  background: #3157cc;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: #2448b6;
+}
+
+button:focus-visible {
+  outline: 3px solid rgb(60 99 217 / 28%);
+  outline-offset: 3px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.task-status {
+  margin-top: 1.5rem;
+  border: 1px solid #b9dec8;
+  border-radius: 0.8rem;
+  padding: 1rem;
+  background: #f1fbf5;
+}
+
+.status-label {
+  margin: 0;
+  color: #17623a;
+  font-weight: 800;
+}
+
+.submitted-question {
+  margin: 0.6rem 0;
+  font-weight: 650;
+  line-height: 1.6;
+}
+
+@media (max-width: 36rem) {
+  .project-shell {
+    padding: 1rem;
+  }
+
+  .research-card {
+    border-radius: 1rem;
+  }
+
+  button {
+    width: 100%;
+  }
+}
