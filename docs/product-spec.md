@@ -2,7 +2,7 @@
 
 > 状态：Draft 0.2
 >
-> 当前阶段：Day 1，只实现可验证的最小前端切片。
+> 当前阶段：在 Day 1 输入切片之上，增加 Research Task 本地 Mock 状态生命周期。
 >
 > 原则：先验证单一研究流程，再引入 Multi-Agent、登录内容、Evaluation Lab 等高不确定性能力。
 
@@ -46,6 +46,30 @@ Day 1 只实现上述流程的第一小块：
 4. 提交后在前端创建并展示一个 Mock Research Task。
 
 Day 1 不调用 LLM、搜索 API 或后端服务，也不伪装已经完成真实研究。
+
+## Research Task Lifecycle Slice
+
+当前切片只通过前端本地 Mock 验证 Research Task 的正常成功路径：
+
+```text
+idle → planning → researching → generating → completed
+```
+
+- 页面尚未创建 Task 时显示 `idle`。
+- 用户提交有效问题后创建本地 Mock Task，并进入 `planning`。
+- 前端 Mock 每隔 1 秒自动推进到下一个正常状态。
+- `failed` 和 `cancelled` 属于生命周期状态，但当前切片不提供触发入口。
+- 状态推进不调用 LLM、搜索 API、数据库或后端服务。
+
+| 状态 | 中文含义 |
+| --- | --- |
+| `idle` | 未开始 |
+| `planning` | 正在制定计划 |
+| `researching` | 正在研究 |
+| `generating` | 正在生成报告 |
+| `completed` | 已完成 |
+| `failed` | 失败 |
+| `cancelled` | 已取消 |
 
 ## MVP Features
 

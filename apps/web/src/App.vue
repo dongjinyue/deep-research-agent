@@ -1,16 +1,48 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
+
+import {
+  createMockResearchTask,
+  MOCK_RESEARCH_STATUS_SEQUENCE,
+  RESEARCH_TASK_STATUS_LABELS,
+  type ResearchTask,
+} from './research-task'
 
 const question = ref('')
-const submittedQuestion = ref('')
+const researchTask = ref<ResearchTask | null>(null)
+const mockTimers: number[] = []
 
 const canStartResearch = computed(() => question.value.trim().length > 0)
+const currentStatus = computed(() => researchTask.value?.status ?? 'idle')
+const currentStatusLabel = computed(() => RESEARCH_TASK_STATUS_LABELS[currentStatus.value])
+
+function clearMockTimers() {
+  mockTimers.splice(0).forEach((timer) => window.clearTimeout(timer))
+}
 
 function startResearch() {
   if (!canStartResearch.value) return
 
-  submittedQuestion.value = question.value.trim()
+  clearMockTimers()
+
+  const task = createMockResearchTask(question.value)
+  researchTask.value = task
+
+  MOCK_RESEARCH_STATUS_SEQUENCE.slice(1).forEach((status, index) => {
+    const timer = window.setTimeout(() => {
+      if (researchTask.value?.id !== task.id) return
+
+      researchTask.value = {
+        ...researchTask.value,
+        status,
+      }
+    }, (index + 1) * 1000)
+
+    mockTimers.push(timer)
+  })
 }
+
+onBeforeUnmount(clearMockTimers)
 </script>
 
 <template>
@@ -36,10 +68,17 @@ function startResearch() {
         <button type="submit" :disabled="!canStartResearch">开始研究</button>
       </form>
 
-      <section v-if="submittedQuestion" class="task-status" role="status">
-        <p class="status-label">Mock Research Task 已创建</p>
-        <p class="submitted-question">{{ submittedQuestion }}</p>
-        <p class="field-hint">下一阶段才会生成 Research Plan 和执行真实研究。</p>
+      <section class="task-status" role="status" aria-live="polite">
+        <p class="status-label">Research Task 状态</p>
+        <p class="submitted-question">
+          <code>{{ currentStatus }}</code>
+          · {{ currentStatusLabel }}
+        </p>
+        <template v-if="researchTask">
+          <p class="submitted-question">{{ researchTask.question }}</p>
+          <p class="field-hint">当前状态由前端 Mock 自动推进，不会调用真实研究服务。</p>
+        </template>
+        <p v-else class="field-hint">提交研究问题后将创建本地 Mock Research Task。</p>
       </section>
     </section>
   </main>
