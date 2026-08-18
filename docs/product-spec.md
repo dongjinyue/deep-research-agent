@@ -49,21 +49,25 @@ Day 1 不调用 LLM、搜索 API 或后端服务，也不伪装已经完成真�
 
 ## Research Task Lifecycle Slice
 
-当前切片只通过前端本地 Mock 验证 Research Task 的正常成功路径：
+当前切片只通过前端本地 Mock 验证 Research Task 的正常成功路径。页面没有 Task 时显示 `idle`，但 `idle` 不是 Research Task 状态：
 
 ```text
-idle → planning → researching → generating → completed
+无 Task（页面 idle）
+       ↓ 创建 Task
+planning → researching → generating → completed
 ```
 
 - 页面尚未创建 Task 时显示 `idle`。
 - 用户提交有效问题后创建本地 Mock Task，并进入 `planning`。
 - 前端 Mock 每隔 1 秒自动推进到下一个正常状态。
-- `failed` 和 `cancelled` 属于生命周期状态，但当前切片不提供触发入口。
 - 状态推进不调用 LLM、搜索 API、数据库或后端服务。
+- Task 只能按已声明的合法路径转换；`completed`、`failed` 和 `cancelled` 是终态。
+- Task 进入 `failed` 时必须携带包含 `code`、`message` 和 `retryable` 的结构化错误。
 
-| 状态 | 中文含义 |
+本地开发和自动化测试可在输入中使用 `[mock:failed]`、`[mock:cancelled]` 模拟终态。它们不是正式用户输入协议或未来 API 契约，创建 Task 前会从 `question` 中移除；两个标记同时出现时仅为保持测试确定性而让 `failed` 优先。
+
+| Research Task 状态 | 中文含义 |
 | --- | --- |
-| `idle` | 未开始 |
 | `planning` | 正在制定计划 |
 | `researching` | 正在研究 |
 | `generating` | 正在生成报告 |
@@ -99,7 +103,7 @@ ResearchTask
 ResearchStep
 ├── id
 ├── question
-├── status
+├── status（使用独立的 ResearchStepStatus，不复用 ResearchTaskStatus）
 └── result?
 
 Source

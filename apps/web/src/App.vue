@@ -4,7 +4,10 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 import {
   createMockResearchTask,
   MOCK_RESEARCH_STATUS_SEQUENCE,
+  PAGE_IDLE_STATUS,
+  PAGE_IDLE_STATUS_LABEL,
   RESEARCH_TASK_STATUS_LABELS,
+  transitionResearchTask,
   type ResearchTask,
 } from './research-task'
 
@@ -13,8 +16,12 @@ const researchTask = ref<ResearchTask | null>(null)
 const mockTimers: number[] = []
 
 const canStartResearch = computed(() => question.value.trim().length > 0)
-const currentStatus = computed(() => researchTask.value?.status ?? 'idle')
-const currentStatusLabel = computed(() => RESEARCH_TASK_STATUS_LABELS[currentStatus.value])
+const currentStatus = computed(() => researchTask.value?.status ?? PAGE_IDLE_STATUS)
+const currentStatusLabel = computed(() =>
+  researchTask.value
+    ? RESEARCH_TASK_STATUS_LABELS[researchTask.value.status]
+    : PAGE_IDLE_STATUS_LABEL,
+)
 
 function clearMockTimers() {
   mockTimers.splice(0).forEach((timer) => window.clearTimeout(timer))
@@ -28,14 +35,15 @@ function startResearch() {
   const task = createMockResearchTask(question.value)
   researchTask.value = task
 
+  // 本地 Mock 终态不会继续注册成功路径的定时推进。
+  if (task.status === 'failed' || task.status === 'cancelled') return
+
   MOCK_RESEARCH_STATUS_SEQUENCE.slice(1).forEach((status, index) => {
     const timer = window.setTimeout(() => {
-      if (researchTask.value?.id !== task.id) return
+      const currentTask = researchTask.value
+      if (!currentTask || currentTask.id !== task.id) return
 
-      researchTask.value = {
-        ...researchTask.value,
-        status,
-      }
+      researchTask.value = transitionResearchTask(currentTask, status)
     }, (index + 1) * 1000)
 
     mockTimers.push(timer)
@@ -76,6 +84,9 @@ onBeforeUnmount(clearMockTimers)
         </p>
         <template v-if="researchTask">
           <p class="submitted-question">{{ researchTask.question }}</p>
+          <p v-if="researchTask.error" class="field-hint">
+            {{ researchTask.error.message }}（{{ researchTask.error.code }}）
+          </p>
           <p class="field-hint">当前状态由前端 Mock 自动推进，不会调用真实研究服务。</p>
         </template>
         <p v-else class="field-hint">提交研究问题后将创建本地 Mock Research Task。</p>

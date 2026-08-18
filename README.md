@@ -14,6 +14,13 @@ Day 1 已完成：
 
 当前页面不会调用 LLM、搜索 API 或后端服务。提交研究问题只会创建一个本地 Mock Research Task。
 
+Research Task 本地 Mock 生命周期已完成：
+
+- 普通问题按 `planning → researching → generating → completed` 自动推进。
+- 本地开发/测试可用 `[mock:failed]` 和 `[mock:cancelled]` 模拟两个终态；标记不会写入 Task 的 `question`，也不是正式输入协议。
+- 页面没有 Task 时显示 `idle`；它不属于 Research Task 状态。
+- 正常状态与两个终态都会显示对应的中文含义，失败状态同时携带结构化错误。
+
 ## 技术栈
 
 - Vue 3
