@@ -62,9 +62,9 @@ planning → researching → generating → completed
 - 前端 Mock 每隔 1 秒自动推进到下一个正常状态。
 - 状态推进不调用 LLM、搜索 API、数据库或后端服务。
 - Task 只能按已声明的合法路径转换；`completed`、`failed` 和 `cancelled` 是终态。
-- Task 进入 `failed` 时必须携带包含 `code`、`message` 和 `retryable` 的结构化错误。
+- Task 进入 `failed` 时必须携带包含 `code`、`message` 和 `retryable` 的结构化错误；页面展示错误信息、错误代码和是否可重试。
 
-本地开发和自动化测试可在输入中使用 `[mock:failed]`、`[mock:cancelled]` 模拟终态。它们不是正式用户输入协议或未来 API 契约，创建 Task 前会从 `question` 中移除；两个标记同时出现时仅为保持测试确定性而让 `failed` 优先。
+仅在本地开发和自动化测试环境中，可在输入中使用 `[mock:failed]`、`[mock:cancelled]` 模拟终态；生产构建不识别这些标记。它们不是正式用户输入协议或未来 API 契约，创建 Task 前会从 `question` 中移除；移除标记后问题为空时不能创建 Task。两个标记同时出现时，仅为保持测试确定性而让 `failed` 优先。
 
 | Research Task 状态 | 中文含义 |
 | --- | --- |

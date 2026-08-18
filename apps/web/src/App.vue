@@ -8,14 +8,45 @@ import {
   PAGE_IDLE_STATUS_LABEL,
   RESEARCH_TASK_STATUS_LABELS,
   transitionResearchTask,
+  type MockResearchTerminalStatus,
   type ResearchTask,
 } from './research-task'
+
+const MOCK_FAILED_MARKER = '[mock:failed]'
+const MOCK_CANCELLED_MARKER = '[mock:cancelled]'
 
 const question = ref('')
 const researchTask = ref<ResearchTask | null>(null)
 const mockTimers: number[] = []
 
-const canStartResearch = computed(() => question.value.trim().length > 0)
+// 开发标记在创建 Task 前被剥离，避免测试控制信息污染真实研究问题。
+function parseLocalMockInput(rawQuestion: string): {
+  question: string
+  terminalStatus?: MockResearchTerminalStatus
+} {
+  const normalizedQuestion = rawQuestion.trim()
+  const terminalStatus = normalizedQuestion.includes(MOCK_FAILED_MARKER)
+    ? 'failed'
+    : normalizedQuestion.includes(MOCK_CANCELLED_MARKER)
+      ? 'cancelled'
+      : undefined
+
+  return {
+    question: normalizedQuestion
+      .replaceAll(MOCK_FAILED_MARKER, '')
+      .replaceAll(MOCK_CANCELLED_MARKER, '')
+      .trim(),
+    terminalStatus,
+  }
+}
+
+// 生产构建只接收普通问题，不把本地 Mock 标记暴露为产品输入协议。
+const researchInput = computed(() =>
+  import.meta.env.DEV
+    ? parseLocalMockInput(question.value)
+    : { question: question.value.trim() },
+)
+const canStartResearch = computed(() => researchInput.value.question.length > 0)
 const currentStatus = computed(() => researchTask.value?.status ?? PAGE_IDLE_STATUS)
 const currentStatusLabel = computed(() =>
   researchTask.value
@@ -24,6 +55,7 @@ const currentStatusLabel = computed(() =>
 )
 
 function clearMockTimers() {
+  // 重新提交或卸载页面时清理旧任务定时器，防止它继续改写新任务状态。
   mockTimers.splice(0).forEach((timer) => window.clearTimeout(timer))
 }
 
@@ -32,7 +64,10 @@ function startResearch() {
 
   clearMockTimers()
 
-  const task = createMockResearchTask(question.value)
+  const task = createMockResearchTask(
+    researchInput.value.question,
+    researchInput.value.terminalStatus,
+  )
   researchTask.value = task
 
   // 本地 Mock 终态不会继续注册成功路径的定时推进。
@@ -41,6 +76,7 @@ function startResearch() {
   MOCK_RESEARCH_STATUS_SEQUENCE.slice(1).forEach((status, index) => {
     const timer = window.setTimeout(() => {
       const currentTask = researchTask.value
+      // 只允许创建这些定时器的 Task 被推进，避免旧回调影响后来提交的 Task。
       if (!currentTask || currentTask.id !== task.id) return
 
       researchTask.value = transitionResearchTask(currentTask, status)
@@ -85,7 +121,8 @@ onBeforeUnmount(clearMockTimers)
         <template v-if="researchTask">
           <p class="submitted-question">{{ researchTask.question }}</p>
           <p v-if="researchTask.error" class="field-hint">
-            {{ researchTask.error.message }}（{{ researchTask.error.code }}）
+            {{ researchTask.error.message }}（{{ researchTask.error.code }}）·
+            {{ researchTask.error.retryable ? '可重试' : '不可重试' }}
           </p>
           <p class="field-hint">当前状态由前端 Mock 自动推进，不会调用真实研究服务。</p>
         </template>

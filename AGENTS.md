@@ -96,34 +96,12 @@ Explore → Clarify → Plan → Implement → Verify → Review Diff
 
 ## 6. Research Task 生命周期规则
 
-状态代码与中文标签统一定义在 `apps/web/src/research-task.ts`，不得在组件中重复维护另一套映射。
-
-当前状态含义：
-
-| 状态 | 中文含义 |
-| --- | --- |
-| `idle` | 未开始 |
-| `planning` | 正在制定计划 |
-| `researching` | 正在研究 |
-| `generating` | 正在生成报告 |
-| `completed` | 已完成 |
-| `failed` | 失败 |
-| `cancelled` | 已取消 |
-
-当前本地 Mock 行为：
-
-```text
-无 Task：idle
-普通问题：planning → researching → generating → completed
-[mock:failed]：直接进入 failed
-[mock:cancelled]：直接进入 cancelled
-```
-
+- 生命周期、标签和合法转换以 `docs/product-spec.md` 与 `apps/web/src/research-task.ts` 为准，不得在组件或本文件重复维护另一份易过期的状态表。
 - `idle` 当前由“没有 Research Task”派生，不得为了显示 `idle` 创建虚假 Task。
-- `[mock:failed]` 和 `[mock:cancelled]` 只属于本地测试工具，不是正式用户输入协议或未来 API 契约。
-- `failed` 和 `cancelled` 不得继续注册正常成功路径的定时推进。
-- 修改状态、转换、优先级或触发方式时，必须同步更新 Product Spec 和测试。
+- 本地测试标记只能在开发和测试环境生效，必须在创建 Task 前从 `question` 中移除；生产构建不得把它们作为输入协议。
+- 状态变更必须通过合法转换函数；进入 `failed` 时必须提供结构化错误。
 - Research Task 状态与未来 Research Step 状态必须使用不同类型，不能复用同一枚举。
+- 修改状态、转换、优先级或触发方式时，必须同步更新 Product Spec 和测试。
 
 ## 7. 文件职责
 
