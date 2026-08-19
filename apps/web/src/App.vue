@@ -2,12 +2,12 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 
 import {
+  advanceMockResearchTask,
   createMockResearchTask,
-  MOCK_RESEARCH_STATUS_SEQUENCE,
   PAGE_IDLE_STATUS,
   PAGE_IDLE_STATUS_LABEL,
+  RESEARCH_STEP_STATUS_LABELS,
   RESEARCH_TASK_STATUS_LABELS,
-  transitionResearchTask,
   type MockResearchTerminalStatus,
   type ResearchTask,
 } from './research-task'
@@ -59,6 +59,24 @@ function clearMockTimers() {
   mockTimers.splice(0).forEach((timer) => window.clearTimeout(timer))
 }
 
+function scheduleMockAdvance(taskId: string) {
+  const timer = window.setTimeout(() => {
+    const currentTask = researchTask.value
+    // 只推进创建当前定时器的 Task，避免旧回调影响后来提交的 Task。
+    if (!currentTask || currentTask.id !== taskId) return
+    if (currentTask.status === 'failed' || currentTask.status === 'cancelled') return
+    if (currentTask.status === 'completed') return
+
+    researchTask.value = advanceMockResearchTask(currentTask)
+
+    if (researchTask.value.status !== 'completed') {
+      scheduleMockAdvance(taskId)
+    }
+  }, 1000)
+
+  mockTimers.push(timer)
+}
+
 function startResearch() {
   if (!canStartResearch.value) return
 
@@ -73,17 +91,7 @@ function startResearch() {
   // 本地 Mock 终态不会继续注册成功路径的定时推进。
   if (task.status === 'failed' || task.status === 'cancelled') return
 
-  MOCK_RESEARCH_STATUS_SEQUENCE.slice(1).forEach((status, index) => {
-    const timer = window.setTimeout(() => {
-      const currentTask = researchTask.value
-      // 只允许创建这些定时器的 Task 被推进，避免旧回调影响后来提交的 Task。
-      if (!currentTask || currentTask.id !== task.id) return
-
-      researchTask.value = transitionResearchTask(currentTask, status)
-    }, (index + 1) * 1000)
-
-    mockTimers.push(timer)
-  })
+  scheduleMockAdvance(task.id)
 }
 
 onBeforeUnmount(clearMockTimers)
@@ -95,7 +103,7 @@ onBeforeUnmount(clearMockTimers)
       <p class="eyebrow">Deep Research Agent</p>
       <h1 id="page-title">开始一次深度研究</h1>
       <p class="summary">
-        输入一个需要搜索、核验和整理资料的问题。Day 1 只创建本地 Mock Task，不会调用真实研究服务。
+        输入一个需要搜索、核验和整理资料的问题。当前只生成并执行前端固定 Mock 计划，不会调用真实研究服务。
       </p>
 
       <form class="research-form" @submit.prevent="startResearch">
@@ -128,6 +136,32 @@ onBeforeUnmount(clearMockTimers)
         </template>
         <p v-else class="field-hint">提交研究问题后将创建本地 Mock Research Task。</p>
       </section>
+
+      <section
+        v-if="researchTask?.plan"
+        class="research-plan"
+        aria-labelledby="research-plan-title"
+      >
+        <h2 id="research-plan-title">研究计划</h2>
+        <p class="field-hint">以下步骤来自前端固定 Mock 模板，仅用于验证计划与状态流转。</p>
+        <ol class="research-steps">
+          <li v-for="step in researchTask.plan.steps" :key="step.id">
+            <h3>{{ step.title }}</h3>
+            <p>{{ step.description }}</p>
+            <p class="step-status">
+              <code>{{ step.status }}</code>
+              · {{ RESEARCH_STEP_STATUS_LABELS[step.status] }}
+            </p>
+          </li>
+        </ol>
+      </section>
+      <p v-else-if="researchTask" class="plan-placeholder">
+        {{
+          researchTask.status === 'planning'
+            ? '正在生成前端 Mock 研究计划…'
+            : '研究计划未生成。'
+        }}
+      </p>
     </section>
   </main>
 </template>

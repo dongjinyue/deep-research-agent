@@ -1,8 +1,8 @@
 # Deep Research Agent + Evaluation Lab
 
-> 状态：Draft 0.2
+> 状态：Draft 0.3
 >
-> 当前阶段：在 Day 1 输入切片之上，增加 Research Task 本地 Mock 状态生命周期。
+> 当前阶段：用单一前端固定 Mock Research Plan 验证规格、展示和串行步骤状态流转。
 >
 > 原则：先验证单一研究流程，再引入 Multi-Agent、登录内容、Evaluation Lab 等高不确定性能力。
 
@@ -54,17 +54,23 @@ Day 1 不调用 LLM、搜索 API 或后端服务，也不伪装已经完成真�
 ```text
 无 Task（页面 idle）
        ↓ 创建 Task
-planning → researching → generating → completed
+planning（正在生成 Plan，尚无 Plan）
+       ↓ 1 秒后 Mock Plan 生成成功
+researching（Plan 已生成，第一个 Step 为 running）
+       ↓ Steps 串行完成
+generating → completed
 ```
 
 - 页面尚未创建 Task 时显示 `idle`。
-- 用户提交有效问题后创建本地 Mock Task，并进入 `planning`。
-- 前端 Mock 每隔 1 秒自动推进到下一个正常状态。
+- 用户提交有效问题后只创建本地 Mock Task，并进入 `planning`；此时 Plan 尚未生成。
+- 1 秒后 Mock Plan 生成成功，Task 获得唯一 Plan 并进入 `researching`，第一个 Step 同时进入 `running`。
+- 全部 Research Steps 串行执行完成后，Task 进入 `generating`。
+- `generating` 持续 1 秒后，Task 进入 `completed`。
 - 状态推进不调用 LLM、搜索 API、数据库或后端服务。
 - Task 只能按已声明的合法路径转换；`completed`、`failed` 和 `cancelled` 是终态。
 - Task 进入 `failed` 时必须携带包含 `code`、`message` 和 `retryable` 的结构化错误；页面展示错误信息、错误代码和是否可重试。
 
-仅在本地开发和自动化测试环境中，可在输入中使用 `[mock:failed]`、`[mock:cancelled]` 模拟终态；生产构建不识别这些标记。它们不是正式用户输入协议或未来 API 契约，创建 Task 前会从 `question` 中移除；移除标记后问题为空时不能创建 Task。两个标记同时出现时，仅为保持测试确定性而让 `failed` 优先。
+仅在本地开发和自动化测试环境中，可在输入中使用 `[mock:failed]`、`[mock:cancelled]` 模拟 `planning` 期间进入终态；生产构建不识别这些标记。它们不是正式用户输入协议或未来 API 契约，创建 Task 前会从 `question` 中移除；移除标记后问题为空时不能创建 Task。两个标记同时出现时，仅为保持测试确定性而让 `failed` 优先。模拟失败或取消时不会生成 Plan，也不会注册自动推进定时器。
 
 | Research Task 状态 | 中文含义 |
 | --- | --- |
@@ -74,6 +80,126 @@ planning → researching → generating → completed
 | `completed` | 已完成 |
 | `failed` | 失败 |
 | `cancelled` | 已取消 |
+
+## Research Plan
+
+### 1. 目标
+
+- 让用户在研究开始前看到系统准备执行的研究步骤。
+- 通过一个前端固定 Mock 模板验证 Research Plan 与 Research Step 的展示和状态变化。
+- 验证 Research Task 状态与 Research Step 状态属于两个独立的状态生命周期。
+
+### 2. 触发条件与前置条件
+
+- 用户提交去除首尾空白后仍非空的 Research Question 时，系统创建 Research Task。
+- 创建 Task 后先进入 `planning`，此时 Plan 尚不存在。
+- Mock Plan 在 1 秒后生成成功；Task 获得一个且仅一个 Plan，并立即进入 `researching`。
+- `planning` 可以合法进入 `failed` 或 `cancelled`；这两条路径不生成 Plan。
+
+### 3. 输入、输出与领域模型
+
+- 输入：Task 的 `id` 与规范化后的 `question`。
+- 输出：一个 `taskId` 与 Task `id` 一致、包含 3 个 Steps 的 Research Plan。
+- 每个 Step 必须有非空 `id`、`title`、`description` 和独立的 `status`。
+
+```ts
+export interface ResearchPlan {
+  id: string
+  taskId: string
+  steps: ResearchStep[]
+}
+
+export interface ResearchStep {
+  id: string
+  title: string
+  description: string
+  status: ResearchStepStatus
+}
+
+export type ResearchStepStatus =
+  | 'pending'
+  | 'running'
+  | 'completed'
+```
+
+Research Task 在 `planning` 成功结束后持有唯一 Plan：
+
+```ts
+plan?: ResearchPlan
+```
+
+`planning` Task 没有 Plan；`researching`、`generating` 和 `completed` Task 必须有 Plan。Research Step 使用独立的 `ResearchStepStatus`，不得复用 `ResearchTaskStatus`。
+
+### 4. 业务规则
+
+- 系统只提供一套包含 3 个 Steps 的固定 Mock 模板，满足 3–6 个 Steps 的范围约束。
+- 模板第一步的描述包含用户提交的 Research Question，便于验证 Plan 与 Task 的关联。
+- 每个 Task 都创建新的 Plan `id` 和新的 Step `id`。
+- Plan 创建时所有 Steps 均为 `pending`。
+- Research Steps 按顺序串行执行，同一时刻最多只有一个 Step 处于 `running`。
+- Step 只能按 `pending → running → completed` 推进；当前切片没有 Step 级失败或跳过状态。
+- 本功能只使用前端本地 Mock，不调用 LLM、搜索 API、数据库或后端服务。
+
+固定 Mock 模板也是产品规格的一部分，不能只隐藏在实现中：
+
+| 顺序 | title | description |
+| --- | --- | --- |
+| 1 | 明确研究范围 | 围绕用户问题确认关键概念、比较维度和研究边界。 |
+| 2 | 收集并核验资料 | 按研究维度收集资料，并交叉核验关键信息。 |
+| 3 | 整理结论与引用 | 基于已核验资料整理结论和可追溯引用。 |
+
+### 5. 状态变化
+
+正常成功路径如下：
+
+```text
+创建 Task
+        ↓
+Task: planning
+Plan: 尚未生成
+        ↓ 1 秒后 Mock Plan 生成成功
+Task: researching
+Steps: running, pending, ...
+        ↓ 每隔 1 秒完成当前 Step，并启动下一 Step
+Steps: completed, running, ...
+        ↓ 全部 Steps 完成
+Task: generating
+        ↓ 1 秒
+Task: completed
+```
+
+Research Step 状态含义：
+
+| Research Step 状态 | 中文含义 |
+| --- | --- |
+| `pending` | 等待执行 |
+| `running` | 执行中 |
+| `completed` | 已完成 |
+
+Task 级 `failed` 和 `cancelled` 继续遵循既有合法转换表。当前本地终态标记模拟 `planning` 期间失败或取消，因此终态 Task 没有 Plan，Steps 也不会开始执行。
+
+### 6. 验收标准
+
+- 创建有效 Research Task 后初始状态为 `planning`，此时不展示尚未生成的 Plan。
+- 1 秒后 Mock Plan 生成成功，Plan `taskId` 与 Task `id` 一致；Task 自动进入 `researching`，第一个 Step 同时进入 `running`。
+- Plan 包含 3 个具有完整字段和唯一 Step `id` 的 Steps；创建时均为 `pending`，进入 `researching` 时只有第一步变为 `running`。
+- 每隔 1 秒，当前 Step 进入 `completed`，下一个 Step 进入 `running`。
+- 全部 Steps 完成后，Task 进入 `generating`，1 秒后进入 `completed`。
+- 任一时刻最多只有一个 Step 为 `running`。
+- `[mock:failed]` 和 `[mock:cancelled]` 可让 Task 在 `planning` 期间进入对应终态；不生成 Plan，也不会继续自动推进。
+- 自动化测试使用 fake timers 验证状态推进，不进行真实时间等待。
+- 页面展示必要的 Step 标题、描述和离散状态，不展示百分比或其他虚假精确进度。
+- 页面明确说明当前 Plan 来自前端固定 Mock，不暗示已经执行真实搜索或研究。
+
+### 7. 当前版本不做什么（Non-goals）
+
+- 不调用 LLM 动态生成 Plan，不连接真实 AI、搜索或后端接口。
+- 不持久化 Task 或 Plan；页面刷新后数据可以丢失。
+- 不实现多个 Research Tasks 的列表或跨 Task 历史管理。
+- 不实现 Plan 重新生成、历史版本、切换、确认或重新规划。
+- 不实现 Plan 或 Step 的人工编辑、拖拽排序和增删步骤。
+- 不实现并行步骤、动态追加步骤、暂停、重试或 Step 级 `failed` / `skipped` 传播规则。
+- 不展示 `progress` 百分比、预计耗时或其他没有真实数据支持的精确指标。
 
 ## MVP Features
 
@@ -95,16 +221,21 @@ ResearchTask
 ├── question
 ├── status
 ├── createdAt
-├── plan: ResearchStep[]
+├── plan?: ResearchPlan（planning 成功结束后存在）
 ├── sources: Source[]
 ├── evidence: Evidence[]
 └── report?: Report
 
+ResearchPlan
+├── id
+├── taskId
+└── steps: ResearchStep[]
+
 ResearchStep
 ├── id
-├── question
-├── status（使用独立的 ResearchStepStatus，不复用 ResearchTaskStatus）
-└── result?
+├── title
+├── description
+└── status: ResearchStepStatus
 
 Source
 ├── id

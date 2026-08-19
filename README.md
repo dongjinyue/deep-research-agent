@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-Day 1 已完成：
+Day 1 基础切片已完成：
 
 - 明确产品 MVP 与非目标。
 - 建立 Vue 3 + TypeScript 前端基础。
@@ -14,12 +14,18 @@ Day 1 已完成：
 
 当前页面不会调用 LLM、搜索 API 或后端服务。提交研究问题只会创建一个本地 Mock Research Task。
 
-Research Task 本地 Mock 生命周期已完成：
+Day 3 Research Plan 规格切片已完成：
 
-- 普通问题按 `planning → researching → generating → completed` 自动推进。
-- 本地开发/测试可用 `[mock:failed]` 和 `[mock:cancelled]` 模拟两个终态；标记不会写入 Task 的 `question`，也不是正式输入协议。
+- 创建有效 Task 后先进入 `planning`；1 秒后前端固定 Mock Plan 生成成功，再进入 `researching`。
+- Plan 包含 3 个步骤；`planning` 期间尚无 Plan，成功进入 `researching` 时第一步开始执行。
+- Step 使用独立于 Task 的状态类型，按 `pending → running → completed` 串行推进。
+- Task 在 Plan 创建后按 `planning → researching → generating → completed` 自动推进。
+- 本地开发/测试可用 `[mock:failed]` 和 `[mock:cancelled]` 模拟 `planning` 期间的两个 Task 终态；此时不生成 Plan，标记不会写入 `question`，也不是正式输入协议。
 - 页面没有 Task 时显示 `idle`；它不属于 Research Task 状态。
 - 正常状态与两个终态都会显示对应的中文含义，失败状态同时携带结构化错误。
+- 页面只展示 Plan 的必要信息和离散状态，不展示虚假精确的进度百分比。
+
+当前仍不会调用 LLM、搜索 API、数据库或后端服务，也不支持 Plan 重新生成、历史切换、编辑、并行步骤或 Step 级失败传播。
 
 ## 技术栈
 

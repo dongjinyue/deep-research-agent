@@ -100,13 +100,13 @@ Explore → Clarify → Plan → Implement → Verify → Review Diff
 - `idle` 当前由“没有 Research Task”派生，不得为了显示 `idle` 创建虚假 Task。
 - 本地测试标记只能在开发和测试环境生效，必须在创建 Task 前从 `question` 中移除；生产构建不得把它们作为输入协议。
 - 状态变更必须通过合法转换函数；进入 `failed` 时必须提供结构化错误。
-- Research Task 状态与未来 Research Step 状态必须使用不同类型，不能复用同一枚举。
+- Research Task 状态与 Research Step 状态必须使用不同类型，不能复用同一枚举。
 - 修改状态、转换、优先级或触发方式时，必须同步更新 Product Spec 和测试。
 
 ## 7. 文件职责
 
 - `apps/web/src/App.vue`：当前研究页面及最小页面级本地状态。
-- `apps/web/src/research-task.ts`：Research Task 状态类型、标签和本地 Mock 创建逻辑；不得依赖 Vue UI。
+- `apps/web/src/research-task.ts`：Research Task、Research Plan、Research Step 的领域类型与本地 Mock 状态逻辑；不得依赖 Vue UI。
 - `apps/web/src/App.spec.ts`：当前用户可观察交互和 Mock 生命周期测试。
 - `apps/web/src/styles.css`：现有全局与页面样式；不得为无关任务做视觉重构。
 - `docs/product-spec.md`：已确认产品行为和范围。

@@ -146,6 +146,56 @@ button:disabled {
   line-height: 1.6;
 }
 
+.research-plan {
+  margin-top: 1.5rem;
+  border: 1px solid #dce3ee;
+  border-radius: 0.8rem;
+  padding: 1rem;
+  background: #ffffff;
+}
+
+.plan-placeholder {
+  margin: 1.5rem 0 0;
+  color: #52627a;
+}
+
+.research-plan h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+}
+
+.research-steps {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1rem 0 0;
+  padding-left: 1.5rem;
+}
+
+.research-steps li {
+  padding-left: 0.25rem;
+}
+
+.research-steps h3,
+.research-steps p {
+  margin: 0;
+}
+
+.research-steps h3 {
+  font-size: 1rem;
+}
+
+.research-steps p {
+  margin-top: 0.35rem;
+  color: #52627a;
+  line-height: 1.5;
+}
+
+.research-steps .step-status {
+  color: #17623a;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
 @media (max-width: 36rem) {
   .project-shell {
     padding: 1rem;
