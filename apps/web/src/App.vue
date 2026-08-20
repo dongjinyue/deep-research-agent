@@ -1,66 +1,22 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
 
+import { createMockResearchRunner } from './mock-research-runner'
 import {
-  advanceMockResearchTask,
-  createMockResearchTask,
   PAGE_IDLE_STATUS,
   PAGE_IDLE_STATUS_LABEL,
   RESEARCH_STEP_STATUS_LABELS,
   RESEARCH_TASK_STATUS_LABELS,
-  transitionResearchTask,
-  type MockResearchTerminalStatus,
   type ResearchTask,
 } from './research-task'
-
-const MOCK_FAILED_MARKER = '[mock:failed]'
-const MOCK_CANCELLED_MARKER = '[mock:cancelled]'
-const MOCK_RESEARCH_FAILED_MARKER = '[mock:research-failed]'
-const MOCK_RESEARCH_CANCELLED_MARKER = '[mock:research-cancelled]'
+import { createResearchTaskService } from './research-task-service'
 
 const question = ref('')
 const researchTask = ref<ResearchTask | null>(null)
-const mockTimers: number[] = []
-
-// 开发标记在创建 Task 前被剥离，避免测试控制信息污染真实研究问题。
-function parseLocalMockInput(rawQuestion: string): {
-  question: string
-  terminalStatus?: MockResearchTerminalStatus
-  executionTerminalStatus?: MockResearchTerminalStatus
-} {
-  const normalizedQuestion = rawQuestion.trim()
-  const terminalStatus = normalizedQuestion.includes(MOCK_FAILED_MARKER)
-    ? 'failed'
-    : normalizedQuestion.includes(MOCK_CANCELLED_MARKER)
-      ? 'cancelled'
-      : undefined
-  const executionTerminalStatus = terminalStatus
-    ? undefined
-    : normalizedQuestion.includes(MOCK_RESEARCH_FAILED_MARKER)
-      ? 'failed'
-      : normalizedQuestion.includes(MOCK_RESEARCH_CANCELLED_MARKER)
-        ? 'cancelled'
-        : undefined
-
-  return {
-    question: normalizedQuestion
-      .replaceAll(MOCK_FAILED_MARKER, '')
-      .replaceAll(MOCK_CANCELLED_MARKER, '')
-      .replaceAll(MOCK_RESEARCH_FAILED_MARKER, '')
-      .replaceAll(MOCK_RESEARCH_CANCELLED_MARKER, '')
-      .trim(),
-    terminalStatus,
-    executionTerminalStatus,
-  }
-}
-
-// 生产构建只接收普通问题，不把本地 Mock 标记暴露为产品输入协议。
-const researchInput = computed(() =>
-  import.meta.env.DEV
-    ? parseLocalMockInput(question.value)
-    : { question: question.value.trim() },
+const researchTaskService = createResearchTaskService(createMockResearchRunner())
+const canStartResearch = computed(() =>
+  researchTaskService.canStart(question.value),
 )
-const canStartResearch = computed(() => researchInput.value.question.length > 0)
 const currentStatus = computed(() => researchTask.value?.status ?? PAGE_IDLE_STATUS)
 const currentStatusLabel = computed(() =>
   researchTask.value
@@ -68,67 +24,17 @@ const currentStatusLabel = computed(() =>
     : PAGE_IDLE_STATUS_LABEL,
 )
 
-function clearMockTimers() {
-  // 重新提交或卸载页面时清理旧任务定时器，防止它继续改写新任务状态。
-  mockTimers.splice(0).forEach((timer) => window.clearTimeout(timer))
-}
-
-function scheduleMockAdvance(
-  taskId: string,
-  executionTerminalStatus?: MockResearchTerminalStatus,
-) {
-  const timer = window.setTimeout(() => {
-    const currentTask = researchTask.value
-    // 只推进创建当前定时器的 Task，避免旧回调影响后来提交的 Task。
-    if (!currentTask || currentTask.id !== taskId) return
-    if (currentTask.status === 'failed' || currentTask.status === 'cancelled') return
-    if (currentTask.status === 'completed') return
-
-    const advancedTask = advanceMockResearchTask(currentTask)
-
-    // 执行期终态在首个 Step 启动后立即触发，并保留当时的 Plan 快照。
-    if (executionTerminalStatus && advancedTask.status === 'researching') {
-      researchTask.value =
-        executionTerminalStatus === 'failed'
-          ? transitionResearchTask(advancedTask, 'failed', {
-              error: {
-                code: 'mock_research_execution_failed',
-                message: '本地模拟研究执行失败',
-                retryable: true,
-              },
-            })
-          : transitionResearchTask(advancedTask, 'cancelled')
-      return
-    }
-
-    researchTask.value = advancedTask
-
-    if (researchTask.value.status !== 'completed') {
-      scheduleMockAdvance(taskId, executionTerminalStatus)
-    }
-  }, 1000)
-
-  mockTimers.push(timer)
-}
-
 function startResearch() {
-  if (!canStartResearch.value) return
-
-  clearMockTimers()
-
-  const task = createMockResearchTask(
-    researchInput.value.question,
-    researchInput.value.terminalStatus,
+  const task = researchTaskService.start(
+    question.value,
+    (nextTask) => (researchTask.value = nextTask),
   )
+  if (!task) return
+
   researchTask.value = task
-
-  // 本地 Mock 终态不会继续注册成功路径的定时推进。
-  if (task.status === 'failed' || task.status === 'cancelled') return
-
-  scheduleMockAdvance(task.id, researchInput.value.executionTerminalStatus)
 }
 
-onBeforeUnmount(clearMockTimers)
+onBeforeUnmount(researchTaskService.dispose)
 </script>
 
 <template>
