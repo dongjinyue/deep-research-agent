@@ -14,13 +14,14 @@ Day 1 基础切片已完成：
 
 当前页面不会调用 LLM、搜索 API 或后端服务。提交研究问题只会创建一个本地 Mock Research Task。
 
-Day 3 Research Plan 规格切片已完成：
+Day 3 Research Plan 与 Day 4 Research Step Execution 规格切片已完成：
 
 - 创建有效 Task 后先进入 `planning`；1 秒后前端固定 Mock Plan 生成成功，再进入 `researching`。
 - Plan 包含 3 个步骤；`planning` 期间尚无 Plan，成功进入 `researching` 时第一步开始执行。
 - Step 使用独立于 Task 的状态类型，按 `pending → running → completed` 串行推进。
 - Task 在 Plan 创建后按 `planning → researching → generating → completed` 自动推进。
 - 本地开发/测试可用 `[mock:failed]` 和 `[mock:cancelled]` 模拟 `planning` 期间的两个 Task 终态；此时不生成 Plan，标记不会写入 `question`，也不是正式输入协议。
+- 本地开发/测试可用 `[mock:research-failed]` 和 `[mock:research-cancelled]` 模拟 Task 在第一个 Step 开始后进入执行期终态；Plan 与 Step 状态会冻结，且不再继续自动推进。
 - 页面没有 Task 时显示 `idle`；它不属于 Research Task 状态。
 - 正常状态与两个终态都会显示对应的中文含义，失败状态同时携带结构化错误。
 - 页面只展示 Plan 的必要信息和离散状态，不展示虚假精确的进度百分比。

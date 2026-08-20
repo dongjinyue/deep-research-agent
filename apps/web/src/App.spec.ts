@@ -15,7 +15,9 @@ import {
 } from './research-task'
 
 afterEach(() => {
-  // 每个用例恢复真实时钟，避免 fake timers 泄漏并影响后续测试。
+  // 恢复测试替身与环境，避免本地 Mock 开关或副作用监视泄漏到后续用例。
+  vi.restoreAllMocks()
+  vi.unstubAllEnvs()
   vi.useRealTimers()
 })
 
@@ -74,6 +76,73 @@ describe('App', () => {
         stepStatuses,
       )
     }
+
+    expect(vi.getTimerCount()).toBe(0)
+
+    await vi.advanceTimersByTimeAsync(3000)
+
+    expect(wrapper.get('[role="status"] code').text()).toBe('completed')
+    expect(wrapper.findAll('.step-status code').map((step) => step.text())).toEqual([
+      'completed',
+      'completed',
+      'completed',
+    ])
+  })
+
+  it('completes the mock lifecycle without network or persistence side effects', async () => {
+    vi.useFakeTimers()
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue({ ok: true } as Response)
+    const xhrOpenSpy = vi
+      .spyOn(XMLHttpRequest.prototype, 'open')
+      .mockImplementation(() => undefined)
+    const storageSetItemSpy = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(() => undefined)
+    const indexedDbOpenSpy =
+      typeof globalThis.indexedDB === 'undefined'
+        ? undefined
+        : vi.spyOn(globalThis.indexedDB, 'open')
+    const wrapper = mount(App)
+
+    await wrapper.get('textarea').setValue('验证本地 Mock 生命周期')
+    await wrapper.get('form').trigger('submit')
+    await vi.advanceTimersByTimeAsync(5000)
+
+    expect(wrapper.get('[role="status"] code').text()).toBe('completed')
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(xhrOpenSpy).not.toHaveBeenCalled()
+    expect(storageSetItemSpy).not.toHaveBeenCalled()
+    if (indexedDbOpenSpy) expect(indexedDbOpenSpy).not.toHaveBeenCalled()
+  })
+
+  it('does not let an old task timer advance a newly submitted task', async () => {
+    vi.useFakeTimers()
+    const wrapper = mount(App)
+
+    await wrapper.get('textarea').setValue('第一个研究问题')
+    await wrapper.get('form').trigger('submit')
+    await vi.advanceTimersByTimeAsync(500)
+
+    await wrapper.get('textarea').setValue('第二个研究问题')
+    await wrapper.get('form').trigger('submit')
+    await vi.advanceTimersByTimeAsync(500)
+
+    expect(wrapper.get('[role="status"] code').text()).toBe('planning')
+    expect(wrapper.get('[role="status"]').text()).toContain('第二个研究问题')
+
+    await vi.advanceTimersByTimeAsync(500)
+
+    expect(wrapper.get('[role="status"] code').text()).toBe('researching')
+    expect(wrapper.findAll('.step-status code').map((step) => step.text())).toEqual([
+      'running',
+      'pending',
+      'pending',
+    ])
+
+    wrapper.unmount()
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('moves a marked mock task directly to failed without starting normal progression', async () => {
@@ -122,6 +191,74 @@ describe('App', () => {
     expect(wrapper.get('[role="status"]').text()).not.toContain('completed')
   })
 
+  it('freezes the plan when research execution fails after the first step starts', async () => {
+    vi.useFakeTimers()
+    const wrapper = mount(App)
+
+    await wrapper
+      .get('textarea')
+      .setValue('[mock:research-failed] 验证执行期失败')
+    await wrapper.get('form').trigger('submit')
+
+    expect(wrapper.get('[role="status"] code').text()).toBe('planning')
+
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(wrapper.get('[role="status"] code').text()).toBe('failed')
+    expect(wrapper.get('[role="status"]').text()).toContain(
+      'mock_research_execution_failed',
+    )
+    expect(wrapper.get('[role="status"]').text()).not.toContain(
+      '[mock:research-failed]',
+    )
+    expect(wrapper.findAll('.step-status code').map((step) => step.text())).toEqual([
+      'running',
+      'pending',
+      'pending',
+    ])
+    expect(vi.getTimerCount()).toBe(0)
+
+    await vi.advanceTimersByTimeAsync(3000)
+
+    expect(wrapper.get('[role="status"] code').text()).toBe('failed')
+    expect(wrapper.findAll('.step-status code').map((step) => step.text())).toEqual([
+      'running',
+      'pending',
+      'pending',
+    ])
+  })
+
+  it('freezes the plan when research execution is cancelled after the first step starts', async () => {
+    vi.useFakeTimers()
+    const wrapper = mount(App)
+
+    await wrapper
+      .get('textarea')
+      .setValue('[mock:research-cancelled] 验证执行期取消')
+    await wrapper.get('form').trigger('submit')
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(wrapper.get('[role="status"] code').text()).toBe('cancelled')
+    expect(wrapper.get('[role="status"]').text()).not.toContain(
+      '[mock:research-cancelled]',
+    )
+    expect(wrapper.findAll('.step-status code').map((step) => step.text())).toEqual([
+      'running',
+      'pending',
+      'pending',
+    ])
+    expect(vi.getTimerCount()).toBe(0)
+
+    await vi.advanceTimersByTimeAsync(3000)
+
+    expect(wrapper.get('[role="status"] code').text()).toBe('cancelled')
+    expect(wrapper.findAll('.step-status code').map((step) => step.text())).toEqual([
+      'running',
+      'pending',
+      'pending',
+    ])
+  })
+
   it('keeps failed precedence when both mock terminal markers are present', async () => {
     const wrapper = mount(App)
 
@@ -133,16 +270,65 @@ describe('App', () => {
     expect(wrapper.get('[role="status"] code').text()).toBe('failed')
   })
 
+  it('keeps planning terminals ahead of research terminals and failed first per phase', async () => {
+    vi.useFakeTimers()
+    const wrapper = mount(App)
+
+    await wrapper
+      .get('textarea')
+      .setValue('[mock:cancelled] [mock:research-failed] 验证阶段优先级')
+    await wrapper.get('form').trigger('submit')
+
+    expect(wrapper.get('[role="status"] code').text()).toBe('cancelled')
+
+    await wrapper
+      .get('textarea')
+      .setValue(
+        '[mock:research-failed] [mock:research-cancelled] 验证执行期优先级',
+      )
+    await wrapper.get('form').trigger('submit')
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(wrapper.get('[role="status"] code').text()).toBe('failed')
+  })
+
   it('does not create a task when local mock markers leave no research question', async () => {
     const wrapper = mount(App)
 
-    await wrapper.get('textarea').setValue('[mock:failed] [mock:cancelled]')
+    await wrapper
+      .get('textarea')
+      .setValue(
+        '[mock:failed] [mock:cancelled] [mock:research-failed] [mock:research-cancelled]',
+      )
 
     expect(wrapper.get('button').attributes('disabled')).toBeDefined()
 
     await wrapper.get('form').trigger('submit')
 
     expect(wrapper.get('[role="status"] code').text()).toBe('idle')
+  })
+
+  it('treats local mock markers as ordinary question text outside development', async () => {
+    vi.useFakeTimers()
+    vi.stubEnv('DEV', false)
+    const wrapper = mount(App)
+    const question =
+      '[mock:failed] [mock:cancelled] [mock:research-failed] [mock:research-cancelled] 生产问题'
+
+    await wrapper.get('textarea').setValue(question)
+    await wrapper.get('form').trigger('submit')
+
+    expect(wrapper.get('[role="status"] code').text()).toBe('planning')
+    expect(wrapper.get('[role="status"]').text()).toContain(question)
+
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(wrapper.get('[role="status"] code').text()).toBe('researching')
+    expect(wrapper.findAll('.step-status code').map((step) => step.text())).toEqual([
+      'running',
+      'pending',
+      'pending',
+    ])
   })
 
   it('defines labels for every lifecycle status', () => {
@@ -190,6 +376,34 @@ describe('App', () => {
     expectTypeOf<ResearchStepStatus>().not.toEqualTypeOf<ResearchTaskStatus>()
   })
 
+  it('renders the fixed mock plan content and clearly discloses its mock scope', async () => {
+    vi.useFakeTimers()
+    const wrapper = mount(App)
+    const question = '研究企业知识库方案'
+
+    await wrapper.get('textarea').setValue(`  ${question}  `)
+    await wrapper.get('form').trigger('submit')
+    await vi.advanceTimersByTimeAsync(1000)
+
+    const steps = wrapper.findAll('.research-steps > li')
+
+    expect(steps).toHaveLength(3)
+    expect(steps.map((step) => step.get('h3').text())).toEqual([
+      '明确研究范围',
+      '收集并核验资料',
+      '整理结论与引用',
+    ])
+    expect(steps.map((step) => step.get('p').text())).toEqual([
+      `围绕“${question}”确认关键概念、比较维度和研究边界。`,
+      '按研究维度收集资料，并交叉核验关键信息。',
+      '基于已核验资料整理结论和可追溯引用。',
+    ])
+    expect(wrapper.get('.research-plan > .field-hint').text()).toContain(
+      '前端固定 Mock 模板',
+    )
+    expect(wrapper.get('.summary').text()).toContain('不会调用真实研究服务')
+  })
+
   it('keeps Day 3 non-goals out of the plan UI', async () => {
     const wrapper = mount(App)
 
@@ -203,39 +417,36 @@ describe('App', () => {
     expect(wrapper.findAll('button')).toHaveLength(1)
   })
 
-  it('keeps exactly one running step while researching', () => {
+  it('runs every step in plan order while preserving serial invariants', () => {
     let task = createMockResearchTask('验证串行步骤')
 
     expect(task.status).toBe('planning')
     expect(task.plan).toBeUndefined()
 
-    task = advanceMockResearchTask(task)
-    expect(task.status).toBe('researching')
-    expect(task.plan?.steps.filter((step) => step.status === 'running')).toHaveLength(
-      1,
-    )
+    const expectedStepStatuses: ResearchStepStatus[][] = [
+      ['running', 'pending', 'pending'],
+      ['completed', 'running', 'pending'],
+      ['completed', 'completed', 'running'],
+    ]
 
-    task = advanceMockResearchTask(task)
-    expect(task.plan?.steps.filter((step) => step.status === 'running')).toHaveLength(
-      1,
-    )
-  })
+    for (const expectedStatuses of expectedStepStatuses) {
+      task = advanceMockResearchTask(task)
 
-  it('advances every successful state without mutating the source task', () => {
-    const task = createMockResearchTask('验证状态转换')
-    const researchingTask = advanceMockResearchTask(task)
-    let generatingTask = researchingTask
-
-    while (generatingTask.status === 'researching') {
-      generatingTask = advanceMockResearchTask(generatingTask)
+      expect(task.status).toBe('researching')
+      expect(task.plan?.steps.map((step) => step.status)).toEqual(expectedStatuses)
+      expect(
+        task.plan?.steps.filter((step) => step.status === 'running'),
+      ).toHaveLength(1)
     }
 
-    const completedTask = advanceMockResearchTask(generatingTask)
-
-    expect(researchingTask.status).toBe('researching')
-    expect(generatingTask.status).toBe('generating')
-    expect(completedTask.status).toBe('completed')
-    expect(task.status).toBe('planning')
+    task = advanceMockResearchTask(task)
+    expect(task.status).toBe('generating')
+    expect(task.plan?.steps.map((step) => step.status)).toEqual([
+      'completed',
+      'completed',
+      'completed',
+    ])
+    expect(task.plan?.steps.some((step) => step.status === 'running')).toBe(false)
   })
 
   it('allows active tasks to fail or be cancelled and keeps terminal states closed', () => {
@@ -261,6 +472,12 @@ describe('App', () => {
 
       expect(failedTask.error).toEqual(error)
       expect(cancelledTask.status).toBe('cancelled')
+      expect(() => advanceMockResearchTask(failedTask)).toThrow(
+        '终态 Research Task failed 不能继续自动推进',
+      )
+      expect(() => advanceMockResearchTask(cancelledTask)).toThrow(
+        '终态 Research Task cancelled 不能继续自动推进',
+      )
       expect(() => transitionResearchTask(failedTask, 'completed')).toThrow()
       expect(() => transitionResearchTask(cancelledTask, 'completed')).toThrow()
     }

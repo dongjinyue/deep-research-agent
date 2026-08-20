@@ -201,6 +201,80 @@ Task 级 `failed` 和 `cancelled` 继续遵循既有合法转换表。当前本�
 - 不实现并行步骤、动态追加步骤、暂停、重试或 Step 级 `failed` / `skipped` 传播规则。
 - 不展示 `progress` 百分比、预计耗时或其他没有真实数据支持的精确指标。
 
+## Research Step Execution
+
+### 目标
+
+在 Mock 研究过程中，让用户看到 Research Steps 依次执行。
+
+### 规则
+
+1. 同一时间最多一个 Research Step 处于 `running`。
+2. 当前 Step 完成后，下一个 `pending` Step 进入 `running`。
+3. 所有 Steps 完成后，Research Task 从 `researching` 进入 `generating`。
+4. 当前版本只模拟顺序执行。
+5. Research Task 进入 `cancelled` 或 `failed` 后，不再继续执行 Steps。
+6. 仅在本地开发和自动化测试环境中，可使用 `[mock:research-failed]` 和 `[mock:research-cancelled]` 模拟执行期终态；Task 刚进入 `researching`、第一个 Step 刚进入 `running` 时立即触发。
+7. 执行期终止后保留 Plan，并冻结已有 Step 状态；当前 `running` Step 和剩余 `pending` Steps 不再变化。
+
+多个本地 Mock 标记同时出现时，按以下顺序确定唯一结果：
+
+```text
+[mock:failed]
+→ [mock:cancelled]
+→ [mock:research-failed]
+→ [mock:research-cancelled]
+```
+
+planning 阶段终态优先于执行期终态，同一阶段始终由 `failed` 优先。所有标记都必须在创建 Task 前从真实 `question` 中移除；生产构建不识别这些标记。
+
+### 状态变化
+
+正常执行路径：
+
+```text
+Task: researching
+Steps: running, pending, pending
+        ↓ 当前 Step 完成，下一 Step 启动
+Steps: completed, running, pending
+        ↓ 按顺序继续
+Steps: completed, completed, running
+        ↓ 最后一个 Step 完成
+Steps: completed, completed, completed
+Task: generating
+```
+
+执行期终止路径：
+
+```text
+Task: researching + Plan 保留
+        ↓ failed 或 cancelled
+Task: failed / cancelled
+Steps: 冻结，不再变化
+后续自动推进计时器：不再注册
+```
+
+### 非目标
+
+- 不执行真实搜索。
+- 不并行执行 Steps。
+- 不提供 Step Retry（步骤重试）。
+- 不进行重新规划。
+- 不提供暂停功能。
+- 不动态追加 Step。
+
+### 验收标准
+
+- [ ] 同一时间最多一个 Step 处于 `running`。
+- [ ] Steps 按顺序执行。
+- [ ] 已完成的 Step 进入 `completed`。
+- [ ] 最后一个 Step 完成后，Research Task 进入 `generating`。
+- [ ] Research Task 进入 `cancelled` 后不再继续执行 Steps。
+- [ ] Research Task 进入 `failed` 后不再继续执行 Steps。
+- [ ] `[mock:research-cancelled]` 在第一个 Step 进入 `running` 后立即将 Task 切换为 `cancelled`，Plan 与 Step 状态保持不变。
+- [ ] `[mock:research-failed]` 在第一个 Step 进入 `running` 后立即将 Task 切换为 `failed`，Plan 与 Step 状态保持不变，并携带结构化错误。
+- [ ] 执行期终态触发后不再注册后续自动推进计时器。
+
 ## MVP Features
 
 - Research Question 输入与基础校验。
